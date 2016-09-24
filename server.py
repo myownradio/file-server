@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*- 
-import os
+import os, hashlib
 from flask import Flask, request, redirect, url_for, jsonify, abort, Response
 from werkzeug.utils import secure_filename
 from flask import send_from_directory
-import hashlib
 
 
 host = 'localhost'				#0.0.0.0
@@ -65,6 +64,12 @@ def detail_file(filename_hash):
 	if request.method == 'DELETE':
 		pass
 
+
+@app.route('/status')
+def get_status():
+	disc = os.statvfs('.')
+	free_space = disc.f_bsize * disc.f_bavail / 1024 / 1024			#место на диске в мб
+	return jsonify({'free space':free_space, 'units':'mb'})
 
 if __name__ == '__main__':
     app.run(host='localhost', port=7000, debug=True)				#настройки ip адреса и порта сервера
