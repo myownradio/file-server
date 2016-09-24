@@ -1,30 +1,48 @@
+# -*- coding: utf-8 -*- 
 import os
-from flask import Flask, request, redirect, url_for
+from flask import Flask, request, redirect, url_for, jsonify, abort, render_template
 from werkzeug.utils import secure_filename
 from flask import send_from_directory
+import hashlib
 
 
-UPLOAD_FOLDER = os.path.abspath('UPLOAD')
-ALLOWED_EXTENSIONS = set(['txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'])
+host = 'localhost'				#0.0.0.0
+port = 7000
+hash_algo = 'sha1'
+content_dir = 'UPLOAD'
+
+
+UPLOAD_FOLDER = os.path.abspath(content_dir)
+BASE_DIR = os.path.abspath('.')
+HASH_BASE = {}
 
 app = Flask(__name__)
-app.config['UPLOAD FOLDER'] = UPLOAD_FOLDER
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 
-def allowed_file(filename):
-	return '.' in filename and \
-			filename.rsplit('.')[1] in ALLOWED_EXTENSIONS
+def sha1_hash_filename(filename):
+	filename = filename.encode('utf-8')
+	hashed_filename = hashlib.sha1(filename)
+	hash_code = hashed_filename.hexdigest()
+	HASH_BASE[hash_code] = filename
+	return hash_code
 
 
-@app.route('/upload', methods=['GET', 'POST'])
-def upload_file():
+@app.route('/file', methods=['GET', 'POST'])
+def index():
 	if request.method == 'POST':
 		file = request.files['file']
-		if file and allowed_file(file.filename):
-			file = secure_filename(file.filename)
+		if file:
+			path = os.path.abspath(content_dir)
+			if os.path.exists(path) == False:
+				os.mkdir(content_dir)
+			else:
+				pass
+			filename = secure_filename(file.filename)
+			filename_hash = sha1_hash_filename(filename)
 			file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-			return redirect(url_for('uploaded_file',
-										filename=filename))
+			response = jsonify({'hash':filename_hash})
+			return response
 	return '''
     <!doctype html>
     <title>Upload new File</title>
@@ -36,10 +54,20 @@ def upload_file():
     '''
 
 
-@app.route('/uploads/<filename>')
-def uploaded_file(filename):
+@app.route('/file/<filename_hash>')
+def uploaded_file(filename_hash):
+	try:
+		filename = HASH_BASE[filename_hash]
+	except	KeyError:
+		abort(404)
 	return send_from_directory(app.config['UPLOAD_FOLDER'],
-								filename)
+			filename)
 
 
+@app.errorhandler(404)
+def not_found(error):
+    return render_template('404.html'), 404
 
+
+if __name__ == '__main__':
+    app.run(host='localhost', port=7000)				#настройки ip адреса и порта сервера
