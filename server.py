@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*- 
 import os
-from flask import Flask, request, redirect, url_for, jsonify, abort, render_template
+from flask import Flask, request, redirect, url_for, jsonify, abort, Response
 from werkzeug.utils import secure_filename
 from flask import send_from_directory
 import hashlib
@@ -9,39 +9,39 @@ import hashlib
 host = 'localhost'				#0.0.0.0
 port = 7000
 hash_algo = 'sha1'
-content_dir = 'UPLOAD'
+content_dir = 'UPLOAD2'
 
 
 UPLOAD_FOLDER = os.path.abspath(content_dir)
 BASE_DIR = os.path.abspath('.')
-HASH_BASE = {}
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 
-def sha1_hash_filename(filename):
-	filename = filename.encode('utf-8')
-	hashed_filename = hashlib.sha1(filename)
-	hash_code = hashed_filename.hexdigest()
-	HASH_BASE[hash_code] = filename
-	return hash_code
+def sha1(file):
+	hash_sha1 = hashlib.sha1()
+	with open(file, 'r') as f:
+		for chunk in iter(lambda: f.read(4096), b""):
+			hash_sha1.update(chunk)
+	return hash_sha1.hexdigest()
 
 
 @app.route('/file', methods=['GET', 'POST'])
-def index():
+def upload_file():
 	if request.method == 'POST':
 		file = request.files['file']
 		if file:
 			path = os.path.abspath(content_dir)
 			if os.path.exists(path) == False:
 				os.mkdir(content_dir)
-			else:
-				pass
 			filename = secure_filename(file.filename)
-			filename_hash = sha1_hash_filename(filename)
 			file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-			response = jsonify({'hash':filename_hash})
+			file = app.config['UPLOAD_FOLDER'] + '/' + filename
+			if hash_algo == 'sha1':
+				sha1_hash = sha1(file)
+			os.rename(file, app.config['UPLOAD_FOLDER'] + '/' + sha1_hash)
+			response = jsonify({'hash':sha1_hash})
 			return response
 	return '''
     <!doctype html>
@@ -54,20 +54,17 @@ def index():
     '''
 
 
-@app.route('/file/<filename_hash>')
-def uploaded_file(filename_hash):
-	try:
-		filename = HASH_BASE[filename_hash]
-	except	KeyError:
-		abort(404)
-	return send_from_directory(app.config['UPLOAD_FOLDER'],
-			filename)
-
-
-@app.errorhandler(404)
-def not_found(error):
-    return render_template('404.html'), 404
+@app.route('/file/<filename_hash>', methods=['GET', 'DELETE'])
+def detail_file(filename_hash):
+	if request.method == 'GET':
+		try:
+			return send_from_directory(app.config['UPLOAD_FOLDER'],
+				filename_hash), {'Content-Type': 'audio/mpeg; charset=utf-8'}
+		except	KeyError:
+			abort(404)
+	if request.method == 'DELETE':
+		pass
 
 
 if __name__ == '__main__':
-    app.run(host='localhost', port=7000)				#настройки ip адреса и порта сервера
+    app.run(host='localhost', port=7000, debug=True)				#настройки ip адреса и порта сервера
