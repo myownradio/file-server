@@ -52,18 +52,17 @@ def get_file_folder(filename_hash):						#функция определяет в
 @app.route('/file/<filename_hash>', methods=['GET', 'DELETE'])
 def detail_file(filename_hash):
 	if len(filename_hash) == 40:
-		try:
-			FOLDER = get_file_folder(filename_hash)
-		except AttributeError:
-			abort(404)
+		FOLDER = get_file_folder(filename_hash)
+		if FOLDER is not None:
+			if request.method == 'GET':
+				return send_from_directory(FOLDER,
+					filename_hash), {'Content-Type': 'audio/mpeg; charset=utf-8'}		#если запрашиваемый файл найден - возвращаем его с заданным "Content-Type"
 
-		if request.method == 'GET':
-			return send_from_directory(FOLDER,
-				filename_hash), {'Content-Type': 'audio/mpeg; charset=utf-8'}			#если запрашиваемый файл найден - возвращаем его с заданным "Content-Type"
-
-		if request.method == 'DELETE':
-			file = os.path.join(FOLDER, filename_hash)
-			os.remove(file)											#удаляем указаный файл
+			if request.method == 'DELETE':
+				file = os.path.join(FOLDER, filename_hash)
+				os.remove(file)
+				return 'remove %s' %filename_hash
+		return abort(404)											#удаляем указаный файл
 	else:
 		abort(404)
 
