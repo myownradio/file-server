@@ -4,18 +4,18 @@ from flask import Flask, request, redirect, url_for, jsonify, abort, Response, s
 from werkzeug.utils import secure_filename
 
 
-port = 7000								#параметры получаемые с консоли
+port = 7000							#параметры получаемые с консоли
 hash_algo = 'sha1'
-content_dir = 'UPLOAD'
+content_dir = 'UPLOAD2'
 
-UPLOAD_FOLDER = os.path.abspath(content_dir)
 BASE_DIR = os.path.abspath('.')
+UPLOAD_FOLDER = os.path.join(BASE_DIR, 'UPLOADS', content_dir)
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 
-def sha1(file):										#функция возвращает sha1 хеш, загружаемого файла
+def sha1(file):								#функция возвращает sha1 хеш, загружаемого файла
 	hash_sha1 = hashlib.sha1()
 	with open(file, 'r') as f:
 		for chunk in iter(lambda: f.read(4096), b""):
@@ -28,9 +28,9 @@ def upload_file():
 	if request.method == 'POST':
 		file = request.files['file']
 		if file:
-			path = os.path.abspath(content_dir)
+			path = app.config['UPLOAD_FOLDER']
 			if os.path.exists(path) == False:
-				os.mkdir(content_dir)
+				os.mkdir(app.config['UPLOAD_FOLDER'])
 			filename = secure_filename(file.filename)										#защита от инъекций в имени загружаемого файла
 			file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
 			file = app.config['UPLOAD_FOLDER'] + '/' + filename
@@ -52,32 +52,38 @@ def upload_file():
 
 
 def get_file_folder(filename_hash):							#фун-я определяет в каком каталоге находиться запрашиваемый файл
-	for obj in os.listdir(BASE_DIR):
-		if os.path.isdir(obj) and obj != '.git':
-			folder = BASE_DIR + '/' + obj
-			if filename_hash in os.listdir(folder):
-				return(folder)
+	for obj in os.listdir(BASE_DIR + '/UPLOADS'):
+		path = os.path.join(BASE_DIR, 'UPLOADS', obj)
+		if os.path.isdir(path):
+			path_to_folder = path
+			if filename_hash in os.listdir(path_to_folder):
+				return(path_to_folder)
 
 
 @app.route('/file/<filename_hash>', methods=['GET', 'DELETE'])
 def get_file(filename_hash):
-	if request.method == 'GET':
-		FOLDER = get_file_folder(filename_hash)
+	if len(filename_hash) == 40:
 		try:
+			FOLDER = get_file_folder(filename_hash)
+		except AttributeError:
+			abort(404)
+
+		if request.method == 'GET':
 			return send_from_directory(FOLDER,
 				filename_hash), {'Content-Type': 'audio/mpeg; charset=utf-8'}			#если запрашиваемый файл найден - возвращаем его с заданным "Content-Type"
-		except KeyError:
-			abort(404)
-	if request.method == 'DELETE':
-		pass
+
+		if request.method == 'DELETE':
+			file = os.path.join(FOLDER, filename_hash)
+			os.remove(file)																#удаляем указаный файл
+	else: abort(404)
 
 
 @app.route('/status', methods=['GET'])
 def get_status():
 	disc = os.statvfs(BASE_DIR)
-	free_space = disc.f_bsize * disc.f_bavail / 1024 / 1024			#функция возвращает оставшееся свободное место на диске в мб
+	free_space = disc.f_bsize * disc.f_bavail / 1024 / 1024					#функция возвращает оставшееся свободное место на диске в мб
 	return jsonify({'free space':free_space, 'units':'mb'})
 
 
 if __name__ == '__main__':
-    app.run(host='localhost', port=port, threaded=True)				#host='0.0.0.0'
+    app.run(host='localhost', port=port, threaded=True)						#host='0.0.0.0'
