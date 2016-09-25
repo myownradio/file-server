@@ -1,26 +1,9 @@
+
 # -*- coding: utf-8 -*- 
-import os, hashlib, argparse
-from flask import Flask, request, Response, send_from_directory, jsonify, abort
+import os, hashlib
+from flask import request, Response, send_from_directory, jsonify, abort
 from werkzeug.utils import secure_filename
-
-
-parser = argparse.ArgumentParser()			#настройка приема аргументов с командной строки
-parser.add_argument("--port", default='7000', type=int, dest='port', help='Port to listen'),
-parser.add_argument("--hash-algo", default='ash1', type=str, dest='hash_algo', help='Hashing algorithm to use'),
-parser.add_argument("--content-dir", type=str, default='UPLOAD', dest='content_dir', help='Enable folder to upload'),
-args = parser.parse_args()
-
-port = args.port							#параметры получаемые с консоли
-hash_algo = args.hash_algo
-content_dir = args.content_dir
-
-
-BASE_DIR = os.path.abspath('.')
-UPLOAD_FOLDER = os.path.join(BASE_DIR, 'UPLOADS', content_dir)
-
-app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024			#16 mb
+from setup import *
 
 
 def sha1(file):								#функция возвращает sha1 хеш, загружаемого файла
@@ -59,7 +42,7 @@ def upload_file():
     '''
 
 
-def get_file_folder(filename_hash):						#фун-я определяет в каком каталоге находиться запрашиваемый файл
+def get_file_folder(filename_hash):						#функция определяет в каком каталоге находиться запрашиваемый файл
 	for obj in os.listdir(BASE_DIR + '/UPLOADS'):
 		path = os.path.join(BASE_DIR, 'UPLOADS', obj)
 		if os.path.isdir(path):
