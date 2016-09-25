@@ -1,9 +1,8 @@
-
 # -*- coding: utf-8 -*- 
 import os, hashlib
 from flask import request, Response, send_from_directory, jsonify, abort
 from werkzeug.utils import secure_filename
-from setup import *
+from config import *
 
 
 def sha1(file):								#функция возвращает sha1 хеш, загружаемого файла
