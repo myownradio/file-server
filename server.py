@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*- 
 import os, hashlib
-from flask import Flask, request, redirect, url_for, jsonify, abort, Response, send_from_directory
+from flask import Flask, request, Response, send_from_directory, jsonify, abort
 from werkzeug.utils import secure_filename
 
 
 port = 7000							#параметры получаемые с консоли
 hash_algo = 'sha1'
-content_dir = 'UPLOAD2'
+content_dir = 'UPLOAD1'
 
 BASE_DIR = os.path.abspath('.')
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'UPLOADS', content_dir)
@@ -31,13 +31,13 @@ def upload_file():
 			path = app.config['UPLOAD_FOLDER']
 			if os.path.exists(path) == False:
 				os.mkdir(app.config['UPLOAD_FOLDER'])
-			filename = secure_filename(file.filename)										#защита от инъекций в имени загружаемого файла
-			file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-			file = app.config['UPLOAD_FOLDER'] + '/' + filename
+			filename = secure_filename(file.filename)									#защита от инъекций в имени загружаемого файла
+			path_to_file = os.path.join(app.config['UPLOAD_FOLDER'], filename)						
+			file.save(path_to_file)
 			if hash_algo == 'sha1':
-				sha1_hash = sha1(file)
-			os.rename(file, app.config['UPLOAD_FOLDER'] + '/' + sha1_hash)					#замена имени файла на его хеш
-			response = jsonify({'hash':sha1_hash})											#возврат response с полученным sha1 хешем файла
+				sha1_hash = sha1(path_to_file)
+			os.rename(path_to_file, os.path.join(app.config['UPLOAD_FOLDER'], sha1_hash))		#замена имени файла на его хеш
+			response = jsonify({'hash':sha1_hash})
 			return response
 		return abort(404)
 	return '''													
@@ -51,7 +51,7 @@ def upload_file():
     '''
 
 
-def get_file_folder(filename_hash):							#фун-я определяет в каком каталоге находиться запрашиваемый файл
+def get_file_folder(filename_hash):						#фун-я определяет в каком каталоге находиться запрашиваемый файл
 	for obj in os.listdir(BASE_DIR + '/UPLOADS'):
 		path = os.path.join(BASE_DIR, 'UPLOADS', obj)
 		if os.path.isdir(path):
@@ -61,7 +61,7 @@ def get_file_folder(filename_hash):							#фун-я определяет в к�
 
 
 @app.route('/file/<filename_hash>', methods=['GET', 'DELETE'])
-def get_file(filename_hash):
+def file_detail(filename_hash):
 	if len(filename_hash) == 40:
 		try:
 			FOLDER = get_file_folder(filename_hash)
@@ -74,8 +74,10 @@ def get_file(filename_hash):
 
 		if request.method == 'DELETE':
 			file = os.path.join(FOLDER, filename_hash)
-			os.remove(file)																#удаляем указаный файл
-	else: abort(404)
+			os.remove(file)										#удаляем указаный файл
+			return 'remove %s' %filename_hash
+	else:
+		abort(404)
 
 
 @app.route('/status', methods=['GET'])
