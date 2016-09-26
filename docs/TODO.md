@@ -32,7 +32,7 @@ server.py --port 80 --hash-algo sha-1 --content-dir /path/to/files --secret d41d
 Параметр `file` содержит в себе файл, который нужно загрузить, а параметр `token` - внезапно, токен, с которым сверяем
 атрибуты загружаемого файла. 
 
-Токен вычисляется следующим образом: `md5("file_name:file_size:client_ip:secret_key")`.
+Токен вычисляется следующим образом: `md5("file_name_in_letters:file_size_in_bytes:client_ip:secret_key")`.
 
 После того как файл будет успешно загружен, нужно вернуть обратно json:
 ```json
@@ -40,7 +40,7 @@ server.py --port 80 --hash-algo sha-1 --content-dir /path/to/files --secret d41d
   "file_name": "...",
   "file_size": "...",
   "file_hash": "...",
-  "confirm_token": ""
+  "confirm_token": "..."
 }
 ```
 
