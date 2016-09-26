@@ -23,4 +23,4 @@ if os.path.exists(os.path.join(BASE_DIR, content_dir)) == False:		#если не
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = os.path.join(BASE_DIR, content_dir)
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024			#16 mb
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024			#Максимальный размер загружаемых файлов, в mb (16 mb)
