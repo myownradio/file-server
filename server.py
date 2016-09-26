@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*- 
-import os, hashlib
+import os, hashlib, shutil
 from flask import request, Response, send_from_directory, jsonify, abort
 from werkzeug.utils import secure_filename
 from config import *
@@ -7,10 +7,19 @@ from config import *
 
 def sha1(file):								#функция возвращает sha1 хеш, загружаемого файла
 	hash_sha1 = hashlib.sha1()
-	with open(file, 'r') as f:
+	with open(file, 'rb') as f:
 		for chunk in iter(lambda: f.read(4096), b""):
 			hash_sha1.update(chunk)
 	return hash_sha1.hexdigest()
+
+
+def take_folder_for_file(file_hash):				#функция создает папки с названиями префексов [0] и [1] от хеша
+	path = os.path.join(app.config['UPLOAD_FOLDER'], file_hash[0], file_hash[1])
+	if os.path.exists(path) == False:			# если такой папки не существует
+		_dir = os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], file_hash[0], file_hash[1]))
+	else:
+		_dir = path 			#если нужная папка была создана ранее
+	return _dir
 
 
 @app.route('/file', methods=['GET', 'POST'])
@@ -18,21 +27,19 @@ def upload_file():
 	if request.method == 'POST':
 		file = request.files['file']
 		if file:
-			path = app.config['UPLOAD_FOLDER']
-			if os.path.exists(path) == False:
-				os.mkdir(app.config['UPLOAD_FOLDER'])
 			filename = secure_filename(file.filename)					#защита от инъекций в имени загружаемого файла
 			path_to_file = os.path.join(app.config['UPLOAD_FOLDER'], filename)						
 			file.save(path_to_file)
-			if hash_algo == 'sha1':
-				sha1_hash = sha1(path_to_file)
-			os.rename(path_to_file, os.path.join(app.config['UPLOAD_FOLDER'], sha1_hash))		#замена имени файла на его хеш
-			response = jsonify({'hash':sha1_hash})
+			if hash_algo == 'sha1':					#получаем хеш файла по алгоритму
+				file_hash = sha1(path_to_file)
+			folder = take_folder_for_file(file_hash)		#создаем папку для файла основываясь на его префексах
+			shutil.move(path_to_file, (os.path.join(app.config['UPLOAD_FOLDER'], file_hash[0], file_hash[1], file_hash)))		#перемещает файл в созданую папку и... 
+			response = jsonify({'hash':file_hash})																				#...меняет его имя на созданый хеш
 			return response
 		return abort(404)
 	return '''													
     <!doctype html>
-    <title>Upload new File</title>
+    <title>Upload new File</title>		
     <h1>Upload new File</h1>
     <form action="" method=post enctype=multipart/form-data>
       <p><input type=file name=file>
@@ -41,28 +48,23 @@ def upload_file():
     '''
 
 
-def get_file_folder(filename_hash):						#функция определяет в каком каталоге находиться запрашиваемый файл
-	for obj in os.listdir(BASE_DIR + '/UPLOADS'):
-		path = os.path.join(BASE_DIR, 'UPLOADS', obj)
-		if os.path.isdir(path):
-			if filename_hash in os.listdir(path):
-				return(path)
+@app.route('/file/<file_hash>')
+def get_file(file_hash):
+	try:
+		folder = os.path.join(app.config['UPLOAD_FOLDER'], file_hash[0], file_hash[1])			#склеиваем путь к папке с файлом
+		return send_from_directory(folder,
+			file_hash), {'Content-Type': 'audio/mpeg; charset=utf-8'}		#если запрашиваемый файл найден - возвращаем его с заданным "Content-Type"											#удаляем указаный файл
+	except TypeError:
+		abort(404)
 
 
-@app.route('/file/<filename_hash>', methods=['GET', 'DELETE'])
-def detail_file(filename_hash):
-	if len(filename_hash) == 40:
-		FOLDER = get_file_folder(filename_hash)
-		if FOLDER is not None:
-			if request.method == 'GET':
-				return send_from_directory(FOLDER,
-					filename_hash), {'Content-Type': 'audio/mpeg; charset=utf-8'}		#если запрашиваемый файл найден - возвращаем его с заданным "Content-Type"
-
-			if request.method == 'DELETE':
-				file = os.path.join(FOLDER, filename_hash)
-				os.remove(file)
-				return 'remove %s' %filename_hash
-		return abort(404)											#удаляем указаный файл
+@app.route('/file/<file_hash>', methods=['DELETE'])
+def delete_file(file_hash):
+	FOLDER = get_file_folder(file_hash)
+	if FOLDER is not None:
+		file = os.path.join(FOLDER, file_hash)						
+		os.remove(file)														#удаляем файл с диска
+		return 'remove %s' %file_hash
 	else:
 		abort(404)
 
@@ -71,7 +73,7 @@ def detail_file(filename_hash):
 def get_status():
 	disc = os.statvfs(BASE_DIR)
 	free_space = disc.f_bsize * disc.f_bavail / 1024 / 1024			#функция возвращает оставшееся свободное место на диске в mb
-	return jsonify({'free space':free_space, 'units':'mb'})
+	return jsonify({'free_space':free_space, 'units':'mb'})
 
 
 if __name__ == '__main__':
