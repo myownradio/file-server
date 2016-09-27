@@ -1,14 +1,12 @@
 # -*- coding: utf-8 -*- 
 import os, hashlib, shutil
 from flask import request, Response, send_from_directory, jsonify, abort
-from werkzeug.utils import secure_filename
 from config import *
 
 
-def sha1(file):						#функция возвращает sha1 хеш, загружаемого файла
+def sha1(stream):						#функция возвращает sha1 хеш, загружаемого файла
 	hash_sha1 = hashlib.sha1()
-	with open(file, 'rb') as f:
-		for chunk in iter(lambda: f.read(4096), b""):
+	for chunk in iter(lambda: stream.read(4096), b""):
 			hash_sha1.update(chunk)
 	return hash_sha1.hexdigest()
 
@@ -32,21 +30,17 @@ def upload_file():
 	if request.method == 'POST':
 		file = request.files['file']
 		token = request.form['token']
-		if file:
-			file_name = secure_filename(file.filename)		#защита от инъекций в имени загружаемого файла	
+		if file and token:
+			if hash_algo == 'sha1':				#получаем хеш файла по алгоритму
+				file_hash = sha1(file.stream)
+			file_name = file.filename
 			file_size = request.headers['Content-Length']
 			client_ip = request.remote_addr
-			if token != get_token(file_name, file_size, client_ip, args.secret):
+			if token != get_token(file_size, client_ip, args.secret):		#сверяем пришедшей токен с сгенерированым
 				abort(404)
-			path_to_file = os.path.join(app.config['UPLOAD_FOLDER'], file_name)					
-			file.save(path_to_file)
-			print(type(path_to_file))
-			if hash_algo == 'sha1':
-				file_hash = sha1(path_to_file)			#получаем хеш файла по алгоритму
-			confirm_token = get_token(file_name, file_size, client_ip, args.secret, file_hash)		#токен для подтверждения корректной загрузки
-			folder = make_folder_for_file(file_hash)			#создаем папку для файла основываясь на его префексах
-			shutil.move(path_to_file, (os.path.join(app.config['UPLOAD_FOLDER'], file_hash[0], file_hash[1], file_hash)))
-			#перемещает файл в созданую папку и заменяем его имя на созданый хеш
+			folder = make_folder_for_file(file_hash)		#создаем папку для загрузки файла
+			file.save(os.path.join(app.config['UPLOAD_FOLDER'], file_hash[0], file_hash[1], file_hash))		#сохраняем
+			confirm_token = get_token(file_size, client_ip, args.secret, file_hash)		#токен для подтверждения корректной загрузки
 			response = jsonify({																							
 					"file_name": file_name,																			
   					"file_size": file_size,
@@ -61,7 +55,7 @@ def upload_file():
     <h1>Upload new File</h1>
     <form action="" method=post enctype=multipart/form-data>
       <p><input type=file name=file>
-      <input type="hidden" name="token" value="3e9122bdc4a976a8698c4a5b685b505a">
+      <input type="hidden" name="token" value="8897fab3a27d92e787ea5bf0e1d2f84d">
         <input type=submit value=Upload>
     </form>
     '''
