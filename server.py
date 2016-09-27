@@ -22,16 +22,9 @@ def make_folder_for_file(file_hash):		#функция создает папку 
 	return _dir			#возвращаем путь к директории
 
 
-def get_token(*args):	#генерируем ключ для проверки авторизации входящих запросов при upload(е) файлов
-	token = ''
-	token += ':'.join(str(arg) for arg in args)			#склевиваем строку из условных ключей
-	return hashlib.md5(token.encode('utf8')).hexdigest()	#возвращаем md5 хеш, который будем использовать для сверки
-
-
-def get_confirm_token(*args):
-	confirm_token = ''
-	confirm_token += ':'.join(str(arg) for arg in args)
-	return hashlib.md5(confirm_token.encode('utf8')).hexdigest()
+def get_token(*args):	#генерируем ключ для авторизации входящих запросов и сверки ответов
+	token = ':'.join(str(arg) for arg in args)			#склевиваем строку из условных ключей
+	return hashlib.md5(token.encode('utf8')).hexdigest()	#возвращаем md5 хеш
 
 
 @app.route('/file', methods=['GET', 'POST'])
@@ -40,25 +33,26 @@ def upload_file():
 		file = request.files['file']
 		token = request.form['token']
 		if file:
-			file_name = secure_filename(file.filename)			#защита от инъекций в имени загружаемого файла
+			file_name = secure_filename(file.filename)		#защита от инъекций в имени загружаемого файла	
 			file_size = request.headers['Content-Length']
 			client_ip = request.remote_addr
 			if token != get_token(file_name, file_size, client_ip, args.secret):
 				abort(404)
 			path_to_file = os.path.join(app.config['UPLOAD_FOLDER'], file_name)					
 			file.save(path_to_file)
+			print(type(path_to_file))
 			if hash_algo == 'sha1':
 				file_hash = sha1(path_to_file)			#получаем хеш файла по алгоритму
-			confirm_token = get_confirm_token(file_name, file_size, client_ip, args.secret, file_hash)		#токен для подтверждения корректной загрузки
+			confirm_token = get_token(file_name, file_size, client_ip, args.secret, file_hash)		#токен для подтверждения корректной загрузки
 			folder = make_folder_for_file(file_hash)			#создаем папку для файла основываясь на его префексах
 			shutil.move(path_to_file, (os.path.join(app.config['UPLOAD_FOLDER'], file_hash[0], file_hash[1], file_hash)))
 			#перемещает файл в созданую папку и заменяем его имя на созданый хеш
 			response = jsonify({																							
-								"file_name": file_name,																			
-  								"file_size": file_size,
-  								"file_hash": file_hash,
-  								"confirm_token": confirm_token,
-							})
+					"file_name": file_name,																			
+  					"file_size": file_size,
+  					"file_hash": file_hash,
+  					"confirm_token": confirm_token,
+				})
 			return response
 		return abort(404)
 	return '''													
