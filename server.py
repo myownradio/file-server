@@ -5,7 +5,7 @@ from werkzeug.utils import secure_filename
 from config import *
 
 
-def sha1(file):				#функция возвращает sha1 хеш, загружаемого файла
+def sha1(file):						#функция возвращает sha1 хеш, загружаемого файла
 	hash_sha1 = hashlib.sha1()
 	with open(file, 'rb') as f:
 		for chunk in iter(lambda: f.read(4096), b""):
@@ -13,28 +13,52 @@ def sha1(file):				#функция возвращает sha1 хеш, загру�
 	return hash_sha1.hexdigest()
 
 
-def take_folder_for_file(file_hash):		#функция создает папки с названиями префексов [0] и [1] от хеша
-	path = os.path.join(app.config['UPLOAD_FOLDER'], file_hash[0], file_hash[1])
-	if os.path.exists(path) == False:			# если такой папки не существует
-		_dir = os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], file_hash[0], file_hash[1]))
+def make_folder_for_file(file_hash):		#функция создает папку и возвращает путь к директории куда будет перемещен загружаемый файл
+	path = os.path.join(app.config['UPLOAD_FOLDER'], file_hash[0], file_hash[1])	#если нужной нам папки не существует
+	if os.path.exists(path) == False:
+		_dir = os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], file_hash[0], file_hash[1]))	#создаем папку
 	else:
-		_dir = path 	#если нужная папка была создана ранее
-	return _dir
+		_dir = path 	#в случае если нужная папка была создана ранее
+	return _dir			#возвращаем путь к директории
+
+
+def get_token(*args):	#генерируем ключ для проверки авторизации входящих запросов при upload(е) файлов
+	token = ''
+	token += ':'.join(str(arg) for arg in args)			#склевиваем строку из условных ключей
+	return hashlib.md5(token.encode('utf8')).hexdigest()	#возвращаем md5 хеш, который будем использовать для сверки
+
+
+def get_confirm_token(*args):
+	confirm_token = ''
+	confirm_token += ':'.join(str(arg) for arg in args)
+	return hashlib.md5(confirm_token.encode('utf8')).hexdigest()
 
 
 @app.route('/file', methods=['GET', 'POST'])
 def upload_file():
 	if request.method == 'POST':
 		file = request.files['file']
+		token = request.form['token']
 		if file:
-			filename = secure_filename(file.filename)	#защита от инъекций в имени загружаемого файла
-			path_to_file = os.path.join(app.config['UPLOAD_FOLDER'], filename)						
+			file_name = secure_filename(file.filename)			#защита от инъекций в имени загружаемого файла
+			file_size = request.headers['Content-Length']
+			client_ip = request.remote_addr
+			if token != get_token(file_name, file_size, client_ip, args.secret):
+				abort(404)
+			path_to_file = os.path.join(app.config['UPLOAD_FOLDER'], file_name)					
 			file.save(path_to_file)
-			if hash_algo == 'sha1':					#получаем хеш файла по алгоритму
-				file_hash = sha1(path_to_file)
-			folder = take_folder_for_file(file_hash)	#создаем папку для файла основываясь на его префексах
-			shutil.move(path_to_file, (os.path.join(app.config['UPLOAD_FOLDER'], file_hash[0], file_hash[1], file_hash)))		#перемещает файл в созданую папку и... 
-			response = jsonify({'hash':file_hash})																				#...меняет его имя на созданый хеш
+			if hash_algo == 'sha1':
+				file_hash = sha1(path_to_file)			#получаем хеш файла по алгоритму
+			confirm_token = get_confirm_token(file_name, file_size, client_ip, args.secret, file_hash)		#токен для подтверждения корректной загрузки
+			folder = make_folder_for_file(file_hash)			#создаем папку для файла основываясь на его префексах
+			shutil.move(path_to_file, (os.path.join(app.config['UPLOAD_FOLDER'], file_hash[0], file_hash[1], file_hash)))
+			#перемещает файл в созданую папку и заменяем его имя на созданый хеш
+			response = jsonify({																							
+								"file_name": file_name,																			
+  								"file_size": file_size,
+  								"file_hash": file_hash,
+  								"confirm_token": confirm_token,
+							})
 			return response
 		return abort(404)
 	return '''													
@@ -43,7 +67,8 @@ def upload_file():
     <h1>Upload new File</h1>
     <form action="" method=post enctype=multipart/form-data>
       <p><input type=file name=file>
-         <input type=submit value=Upload>
+      <input type="hidden" name="token" value="3e9122bdc4a976a8698c4a5b685b505a">
+        <input type=submit value=Upload>
     </form>
     '''
 
@@ -62,18 +87,18 @@ def get_file(file_hash):
 def delete_file(file_hash):
 	file = os.path.join(app.config['UPLOAD_FOLDER'], file_hash[0], file_hash[1], file_hash)
 	if file:					
-		os.remove(file)							#удаляем файл с диска
-		return pass
+		os.remove(file)					#удаляем файл с диска
+		return 'remove %s' %file_hash
 	else:
 		abort(404)
 
 
-@app.route('/status', methods=['GET'])
+@app.route('/status', methods=['GET'])		#функция возвращает оставшееся свободное место на диске в bytes
 def get_status():
 	disc = os.statvfs(BASE_DIR)
-	free_space = disc.f_bsize * disc.f_bavail / 1024 / 1024			#функция возвращает оставшееся свободное место на диске в mb
-	return jsonify({'free_space':free_space, 'units':'mb'})
+	free_space = disc.f_bsize * disc.f_bavail	
+	return jsonify({'free_space':free_space})
 
 
 if __name__ == '__main__':
-   	app.run(host='127.0.0.1', port=args.port, threaded=True)		#host='0.0.0.0'; threaded = True - рекамендация по запуску приложений без настроенного WSGI
+   	app.run(host='127.0.0.1', port=args.port, threaded=True, debug=True)	#host='0.0.0.0'; threaded=True - рекамендация по запуску приложений без настроенного WSGI
